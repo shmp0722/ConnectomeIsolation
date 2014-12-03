@@ -34,7 +34,7 @@ rmse   = feGet(fe,'vox rmse');
 dwi = dwiLoad(feGet(fe,'dwifile'));
 %% make a predicted diffusion data
 outputname = 'rRMSEmap_life_build_model_demo_CSD_PROB_small.nii.gz';
-
+    
 % retrieve argument form fe structure
 coords  = feGet(fe,'roi coords');
 xform   = feGet(fe,'xform img 2 acpc');
@@ -70,30 +70,30 @@ pSig = feGet(fe,'pSig fiber');
 % model.
 % R2 = feGet(fe,'total r2');
 % Residual signal: (fiber prediction - measured_demeaned).
-res = feGet(fe,'res sig fiber');
+% res = feGet(fe,'res sig fiber');
 
-%% RMSE off the model
-maxRmse = 90;
-% rmseImg = feReplaceImageValues(nan(mapsize),rmseR,coords);
-rmseImg = feReplaceImageValues(zeros(mapsize),rmseR,coords);
+% %% RMSE off the model
+% maxRmse = 90;
+% % rmseImg = feReplaceImageValues(nan(mapsize),rmseR,coords);
+% rmseImg = feReplaceImageValues(zeros(mapsize),rmseR,coords);
+% 
+% rmseImg(rmseImg > maxRmse) = maxRmse;
+% ni  = niftiCreate('data',rmseImg, 'fname', outputname, ...
+%     'qto_xyz',xform, ...
+%     'fname','FDM', ...
+%     'data_type',class(rmseImg));
 
-rmseImg(rmseImg > maxRmse) = maxRmse;
-ni  = niftiCreate('data',rmseImg, 'fname', outputname, ...
-    'qto_xyz',xform, ...
-    'fname','FDM', ...
-    'data_type',class(rmseImg));
-
-%% the total number of fibers for all the voxels
-% total number
-nFibers = feGet(fe,'totfnum');
-size(nFibers')
-nFibersImg = feReplaceImageValues(zeros(mapsize),nFibers',coords);
-outputname = 'TotalNumFibers_life_build_model_demo_CSD_PROB_small.nii.gz';
-
-ni  = niftiCreate('data',nFibersImg, 'fname', outputname, ...
-    'qto_xyz',xform, ...
-    'fname','nFibers', ...
-    'data_type',class(nFibersImg));
+% %% the total number of fibers for all the voxels
+% % total number
+% nFibers = feGet(fe,'totfnum');
+% size(nFibers')
+% nFibersImg = feReplaceImageValues(zeros(mapsize),nFibers',coords);
+% outputname = 'TotalNumFibers_life_build_model_demo_CSD_PROB_small.nii.gz';
+% 
+% ni  = niftiCreate('data',nFibersImg, 'fname', outputname, ...
+%     'qto_xyz',xform, ...
+%     'fname','nFibers', ...
+%     'data_type',class(nFibersImg));
 
 %% Measured signal in VOI, demeaned, this is the signal used for the fiber-portion of the M model.
 % dSig = feGet(fe,'dsigdemeaned',coords');
@@ -111,9 +111,15 @@ ni  = niftiCreate('data',nFibersImg, 'fname', outputname, ...
 pSigByVoxel = feGet(fe, 'psigfullvox');
 % pSigByVoxel2 = feGet(fe,'psigfullvox',coords');
 % pSigByVoxel = feGet(fe, 'pSig full by voxel',voxelIndex);
-size( pSigByVoxel)
+size(pSigByVoxel)
 
-%
+%%
+% Reshape the predicted signal by voxles
+    predicted = reshape(feGet(fe,'pSig fiber test'), feGet(fe,'nBvecs'), feGet(fe,'nVoxels'));
+
+
+
+%%
 pSigByVoxelImg = feReplaceImageValues(zeros(mapsize),pSigByVoxel,coords);
 outputname = 'pSigByVoxel_life_build_model_demo_CSD_PROB_small.nii.gz';
 
@@ -128,7 +134,7 @@ showMontage(ni.data)
 colormap 'jet'
 
 %% create dwi 
-ni  = dwiCreate('data',nFibersImg, 'fname', outputname, ...
+ni  = niftiCreate('data',nFibersImg, 'fname', outputname, ...
     'qto_xyz',xform, ...
     'fname','nFibers', ...
     'data_type',class(nFibersImg));
@@ -136,9 +142,8 @@ ni  = dwiCreate('data',nFibersImg, 'fname', outputname, ...
 % Load original dwi
 dwi = dwiLoad(feGet(fe,'dwifile'));
 
-
 % Example:
-ni = dwiCreate('nifti',"",'bvecs',dwi.bvecs,'bvals',dwi.bvals);
+ni = dwiCreate('nifti',[],'bvecs',dwi.bvecs,'bvals',dwi.bvals);
 
 
 %%  
