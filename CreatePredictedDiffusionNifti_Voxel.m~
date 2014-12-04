@@ -1,4 +1,4 @@
-function CreatePredictedDiffusionNifti
+function CreatePredictedDiffusionNifti_Voxel
 %% Use Franco's example data
 
 try, lifeDemoDataPath
@@ -70,37 +70,35 @@ Q = feComputeCanonicalDiffusion(fe.fg.fibers, [1 0 0]); % Q =voxTensors;
 
 % Return the VOI comprised by the full connectome.
 coords = feGet(fe,'roi coords'); % in img space
-S0 = feGet(fe,'b0 signal image',coords');
+S0 = feGet(fe,'b0 signal image');%,coords');
+% get Diffusion direction in each voxels
 Q2 = feComputeCanonicalDiffusion_voxel(coords', [1 0 0]); % Q =voxTensors;
 
+% predicted = feGet(fe,'pSig f vox');
+predicted = feGet(fe,'pSig f vox', coords(1,:));
+measured = feGet(fe,'dSig full by Voxel', coords(1,:)');
 
-% Given a set of VOI coords finds the row numbers of the Model matrix
-    % (or equivalently the dSig vector) that represent the data for this
-    % set of VOI coords.
-    % foundVoxels = feGet(fe,'coords 2 rows',1)
-    % foundVoxels = feGet(fe,'coords 2 rows',coords)
-    %
-    % coords      - a Nx3 set of coordinates in image space
-    % foundVoxels - a binary vector that is 1 for each Model matrix row
-    %               that corresponds to at least one of the coords.
-    
-    feGet(fe,'find voxels',coords(1,:)')
+predicted2 = feGet(fe,'pSig f vox', coords(2,:)');
+measured2 = feGet(fe,'dSig full by Voxel', coords(2,:)');
+
+
+size(predicted)
 %% Add diffusion signal for each fiber coordinate
 
 % We are not sure about which coordinate is the xyz
 % We are not sure how to get the S0 value out of the b=0 (non-diffusion
 % weighted) image
-oneFiber = floor(fe.fg.fibers{1});
+oneFiber = coords;
 
 % We want the S0 from the raw data, and then we want the S0 values for each
 % voxel in the fiber
 % S0 = feGet(fe,'b0 signal image');
-feGet(fe,'voxels indices',fe.fg.fibers)
+% feGet(fe,'voxels indices',fe.fg.fibers)
 
-val = feGet(fe,'b0 signal image',int32(oneFiber));
+% val = feGet(fe,'b0 signal image',int32(oneFiber));
   
 % Once we get the S0 values for this particular voxel, we can compute
-voxDSig = feComputeSignal(S0, bvecs', bvals, Q{1});
+voxDSig = feComputeSignal(S0, bvecs, bvals, Q2);
 
 for ii=1:length(oneFiber)
     for jj=1:length(bvec)
