@@ -11,8 +11,6 @@ end
 
 % Here are the original dMRI data
 dwiFile       = fullfile(lifeDemoDataPath('diffusion'),'life_demo_scan1_subject1_b2000_150dirs_stanford.nii.gz');
-
-
 dwiFileRepeat = fullfile(lifeDemoDataPath('diffusion'),'life_demo_scan2_subject1_b2000_150dirs_stanford.nii.gz');
 t1File        = fullfile(lifeDemoDataPath('anatomy'),  'life_demo_anatomy_t1w_stanford.nii.gz');
 
@@ -53,7 +51,6 @@ fe = feSet(fe,'fit',feFitModel(feGet(fe,'mfiber'),feGet(fe,'dsigdemeaned'),'bbnn
 % the weights from the LiFE solution
 wgts = feGet(fe,'fiber weights');
 
-
 %% Make an empty nifti file the same size as the original
 pNifti = niftiCreate;
 pData = zeros(size(nifti.data));
@@ -69,26 +66,51 @@ Q = feComputeCanonicalDiffusion(fe.fg.fibers, [1 0 0]); % Q =voxTensors;
 % We don't need the Q value in each fiber and nodes
 
 % Return the VOI comprised by the full connectome.
-coords = feGet(fe,'roi coords'); % in img space
+VOI_coords = feGet(fe,'roi coords'); % in img space
+%
 S0 = feGet(fe,'b0 signal image');%,coords');
 % get Diffusion direction in each voxels
-Q2 = feComputeCanonicalDiffusion_voxel(coords', [1 0 0]); % Q =voxTensors;
+Q2 = feComputeCanonicalDiffusion_voxel(VOI_coords', [1 0 0]); % Q =voxTensors;
+% Return the model (M matrix), or a subset of it.
+Mfiber = feGet(fe,'model',coords');
 
+% Isotropic portion of M matrix. Returns the matrix for the full model or
+% for a subset of voxels.
+
+Miso = feGet(fe,'M iso',coords');
+
+% Return the number of the fibers gooes through the voxels.
+idxFibers = feGet(fe,'uniquef',coords');    % for some the voxels,
+% Return the total number of fibers for all the voxels or in a set of
+% voxels
+nFibers = feGet(fe,'totfnum');
+%%
 % predicted = feGet(fe,'pSig f vox');
-predicted = feGet(fe,'pSig f vox', coords(1,:));
-measured = feGet(fe,'dSig full by Voxel', coords(1,:)');
+pSig = feGet(fe,'pSig f vox', VOI_coords(1,:)');
+measured = feGet(fe,'dSig full by Voxel', VOI_coords(1,:)');
 
-predicted2 = feGet(fe,'pSig f vox', coords(2,:)');
-measured2 = feGet(fe,'dSig full by Voxel', coords(2,:)');
+predicted2 = feGet(fe,'pSig f vox', VOI_coords(2,:)');
+measured2 = feGet(fe,'dSig full by Voxel', VOI_coords(2,:)');
 
 
-size(predicted)
+size(pSig)
+
+
+% for ii=1:length(VOI_coords)
+    for jj=1:length(bvecs)
+        pData(VOI_coords(1,1),VOI_coords(2,1),VOI_coords(3,1),jj) = ...
+            feGet(fe,'pSig f vox', VOI_coords(jj,:)');
+
+    end
+% end
+
+
 %% Add diffusion signal for each fiber coordinate
 
 % We are not sure about which coordinate is the xyz
 % We are not sure how to get the S0 value out of the b=0 (non-diffusion
 % weighted) image
-oneFiber = coords;
+oneFiber = VOI_coords;
 
 % We want the S0 from the raw data, and then we want the S0 values for each
 % voxel in the fiber
@@ -101,7 +123,7 @@ oneFiber = coords;
 voxDSig = feComputeSignal(S0, bvecs, bvals, Q2);
 
 for ii=1:length(oneFiber)
-    for jj=1:length(bvec)
+    for jj=1:length(bvecs)
         pData(oneFiber(1,1),oneFiber(2,1),oneFiber(3,1),jj) = ...
             wgts(ii)*exp(-b*(bvec(jj)'*Q*bvec(jj))); 
     end
@@ -112,6 +134,7 @@ pNifti = niftiSet(pNifti,'data',pData);
 
 
 %% Add diffusion signal for each fiber coordinate
+% Original; 
 
 % We are not sure about which coordinate is the xyz
 % We are not sure how to get the S0 value out of the b=0 (non-diffusion
@@ -186,13 +209,13 @@ feFileName    = 'life_build_model_demo_CSD_PROB_small';
 
 
 % Take all voxels 
-coords = horzcat(small_fg.fibers{:});
+VOI_coords = horzcat(small_fg.fibers{:});
 % transform in img space 
-coords = unique(floor(mrAnatXformCoords(dwi.nifti.qto_ijk,coords)),'rows');
+VOI_coords = unique(floor(mrAnatXformCoords(dwi.nifti.qto_ijk,VOI_coords)),'rows');
 % Keep original index
-indx = sub2ind(dwi.nifti.dim(1:3),coords(:,1),coords(:,2),coords(:,3));
+indx = sub2ind(dwi.nifti.dim(1:3),VOI_coords(:,1),VOI_coords(:,2),VOI_coords(:,3));
 %% Get diffusion data from a fiber
-dSig    = dwiGet(dwi,'diffusion data image',coords);
+dSig    = dwiGet(dwi,'diffusion data image',VOI_coords);
 
 %% Compute the predicted signal by each tensors of each node in this voxel.
 
