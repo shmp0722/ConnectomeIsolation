@@ -24,7 +24,6 @@ bvals =   dlmread(fullfile(lifeDemoDataPath('diffusion'),'life_demo_scan1_subjec
 
 dwi   = dwiCreate('nifti',nifti,'bvecs',bvecs,'bvals',bvals);
 
-clear bvecs, clear bvals;
 %% Take the first 10 fibers from the fiber group
 
 % This is intended to run quickly
@@ -39,9 +38,6 @@ small_fg.pathwayInfo = fg.pathwayInfo(1:10);
 clear fg
 
 % small_fg.fibers{ii} are the coordinates in ACPC space
-
-%% We need the weights from the LiFE solution
-
 
 %% Build a model of the connectome.
 %
@@ -76,20 +72,31 @@ Q = feComputeCanonicalDiffusion(fe.fg.fibers, [1 0 0]); % Q =voxTensors;
 % weighted) image
 oneFiber = floor(fe.fg.fibers{1});
 
-% We want the S0 from the raw data, and then we want the S0 values for each
-% voxel in the fiber
-% S0 = feGet(fe,'b0 signal image');
-feGet(fe,'voxels indices',fe.fg.fibers)
+% We want the S0 from the nifti data, 
+% and then we want the S0 values for each voxel in each fiber
 
-val = feGet(fe,'b0 signal image',int32(oneFiber));
+% S0 = feGet(fe,'b0 signal image');
+
+% These coordinates are within the first fiber, and thus the connectome
+% This is an N x 3 matrix of integers, needed by feGet.
+% This way of getting the fiber coordinates matches the coordinates in the
+% ROI.  But it is obviously ridiculous and if we have to have a difference
+% in the coordinate frames, then there has to be a roi2fg() coordinate
+% transform.  We can't write code like this everywhere.
+fCoords = ((uint32(ceil(fe.fg.fibers{1})))+1)';
+cCoords = uint32(feGet(fe,'roi coords'));
+
+% This takes an 
+foundVoxels = feGet(fe,'find voxels',fCoords)
 
 % Once we get the S0 values for this particular voxel, we can compute
+S0 = feGet(fe,'b0 signal image');
 voxDSig = feComputeSignal(S0, bvecs', bvals(:), Q{1});
 
 for ii=1:length(oneFiber)
     for jj=1:length(bvec)
         pData(oneFiber(1,1),oneFiber(2,1),oneFiber(3,1),jj) = ...
-            wgts(ii)*exp(-b*(bvec(jj)'*Q*bvec(jj))); 
+            wgts(ii)*feComputeSignal(S0, bvecs', bvals(:), Q{1}); 
     end
 end
 
