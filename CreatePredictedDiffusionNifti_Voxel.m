@@ -1,4 +1,4 @@
-function CreatePredictedDiffusionNifti
+function CreatePredictedDiffusionNifti_Voxel
 %% Use Franco's example data
 
 try, lifeDemoDataPath
@@ -11,8 +11,6 @@ end
 
 % Here are the original dMRI data
 dwiFile       = fullfile(lifeDemoDataPath('diffusion'),'life_demo_scan1_subject1_b2000_150dirs_stanford.nii.gz');
-
-
 dwiFileRepeat = fullfile(lifeDemoDataPath('diffusion'),'life_demo_scan2_subject1_b2000_150dirs_stanford.nii.gz');
 t1File        = fullfile(lifeDemoDataPath('anatomy'),  'life_demo_anatomy_t1w_stanford.nii.gz');
 
@@ -24,6 +22,7 @@ bvals =   dlmread(fullfile(lifeDemoDataPath('diffusion'),'life_demo_scan1_subjec
 
 dwi   = dwiCreate('nifti',nifti,'bvecs',bvecs,'bvals',bvals);
 
+% clear bvecs, clear bvals;
 %% Take the first 10 fibers from the fiber group
 
 % This is intended to run quickly
@@ -52,7 +51,6 @@ fe = feSet(fe,'fit',feFitModel(feGet(fe,'mfiber'),feGet(fe,'dsigdemeaned'),'bbnn
 % the weights from the LiFE solution
 wgts = feGet(fe,'fiber weights');
 
-
 %% Make an empty nifti file the same size as the original
 pNifti = niftiCreate;
 pData = zeros(size(nifti.data));
@@ -64,38 +62,99 @@ pData = zeros(size(nifti.data));
 % The diagonal parameters are for a perfect stick, [1 0 0]
 Q = feComputeCanonicalDiffusion(fe.fg.fibers, [1 0 0]); % Q =voxTensors;
 
+%% Just thinking about in VOI
+% We don't need the Q value in each fiber and nodes
+
+% Return the VOI comprised by the full connectome.
+VOI_coords = feGet(fe,'roi coords'); % in img space
+%
+S0 = feGet(fe,'b0 signal image');%,coords');
+% get Diffusion direction in each voxels
+Q2 = feComputeCanonicalDiffusion_voxel(VOI_coords', [1 0 0]); % Q =voxTensors;
+% Return the model (M matrix), or a subset of it.
+Mfiber = feGet(fe,'model',coords');
+
+% Isotropic portion of M matrix. Returns the matrix for the full model or
+% for a subset of voxels.
+
+Miso = feGet(fe,'M iso',coords');
+
+% Return the number of the fibers gooes through the voxels.
+idxFibers = feGet(fe,'uniquef',coords');    % for some the voxels,
+% Return the total number of fibers for all the voxels or in a set of
+% voxels
+nFibers = feGet(fe,'totfnum');
+%%
+% predicted = feGet(fe,'pSig f vox');
+pSig = feGet(fe,'pSig f vox', VOI_coords(1,:)');
+measured = feGet(fe,'dSig full by Voxel', VOI_coords(1,:)');
+
+predicted2 = feGet(fe,'pSig f vox', VOI_coords(2,:)');
+measured2 = feGet(fe,'dSig full by Voxel', VOI_coords(2,:)');
+
+
+size(pSig)
+
+
+% for ii=1:length(VOI_coords)
+    for jj=1:length(bvecs)
+        pData(VOI_coords(1,1),VOI_coords(2,1),VOI_coords(3,1),jj) = ...
+            feGet(fe,'pSig f vox', VOI_coords(jj,:)');
+
+    end
+% end
+
+
 %% Add diffusion signal for each fiber coordinate
+
+% We are not sure about which coordinate is the xyz
+% We are not sure how to get the S0 value out of the b=0 (non-diffusion
+% weighted) image
+oneFiber = VOI_coords;
+
+% We want the S0 from the raw data, and then we want the S0 values for each
+% voxel in the fiber
+% S0 = feGet(fe,'b0 signal image');
+% feGet(fe,'voxels indices',fe.fg.fibers)
+
+% val = feGet(fe,'b0 signal image',int32(oneFiber));
+  
+% Once we get the S0 values for this particular voxel, we can compute
+voxDSig = feComputeSignal(S0, bvecs, bvals, Q2);
+
+for ii=1:length(oneFiber)
+    for jj=1:length(bvecs)
+        pData(oneFiber(1,1),oneFiber(2,1),oneFiber(3,1),jj) = ...
+            wgts(ii)*exp(-b*(bvec(jj)'*Q*bvec(jj))); 
+    end
+end
+
+
+pNifti = niftiSet(pNifti,'data',pData);
+
+
+%% Add diffusion signal for each fiber coordinate
+% Original; 
 
 % We are not sure about which coordinate is the xyz
 % We are not sure how to get the S0 value out of the b=0 (non-diffusion
 % weighted) image
 oneFiber = floor(fe.fg.fibers{1});
 
-% We want the S0 from the nifti data, 
-% and then we want the S0 values for each voxel in each fiber
-
+% We want the S0 from the raw data, and then we want the S0 values for each
+% voxel in the fiber
 % S0 = feGet(fe,'b0 signal image');
+feGet(fe,'voxels indices',fe.fg.fibers)
 
-% These coordinates are within the first fiber, and thus the connectome
-% This is an N x 3 matrix of integers, needed by feGet.
-% This way of getting the fiber coordinates matches the coordinates in the
-% ROI.  But it is obviously ridiculous and if we have to have a difference
-% in the coordinate frames, then there has to be a roi2fg() coordinate
-% transform.  We can't write code like this everywhere.
-fCoords = ((uint32(ceil(fe.fg.fibers{1})))+1)';
-cCoords = uint32(feGet(fe,'roi coords'));
-
-% This takes an 
-foundVoxels = feGet(fe,'find voxels',fCoords)
-
+val = feGet(fe,'b0 signal image',int32(oneFiber));
+  
 % Once we get the S0 values for this particular voxel, we can compute
-S0 = feGet(fe,'b0 signal image');
 voxDSig = feComputeSignal(S0, bvecs', bvals(:), Q{1});
 
 for ii=1:length(oneFiber)
     for jj=1:length(bvec)
         pData(oneFiber(1,1),oneFiber(2,1),oneFiber(3,1),jj) = ...
-            wgts(ii)*feComputeSignal(S0, bvecs', bvals(:), Q{1}); 
+            wgts(ii)*exp(-b*(bvec(jj)'*Q*bvec(jj))); 
     end
 end
 
@@ -105,7 +164,7 @@ pNifti = niftiSet(pNifti,'data',pData);
 %%
 % This returns a matrix that is size nBvecs x num_unique_fibers 
   voxelPSignal      = feComputeVoxelSignal(fe,1);
-  voxTensors        = feGet(fe,'voxeltensors', 1);  % Get the tensors for each node in each fiber 
+voxTensors        = feGet(fe,'voxeltensors',    1);  % Get the tensors for each node in each fiber 
 
 % Index for the voxel
 %     vv = feGet(fe,'voxelsindices');
@@ -131,14 +190,32 @@ pNifti = niftiSet(pNifti,'data',pData);
 feFileName    = 'life_build_model_demo_CSD_PROB_small';
 
 %% dwi Get
+
+% Examples:
+%   To get diffusion data from a fiber
+%   nifti = niftiRead('raw/DTI__aligned_trilin.nii.gz');
+%   bvecs =   dlmread('raw/DTI__aligned_trilin.bvecs');
+%   bvals =   dlmread('raw/DTI_aligned_trilin.bvals');
+%   dwi   = dwiCreate('nifti',nifti,'bvecs',bvecs,'bvals',bvals);
+%   coords = [64 64 30;64 64 31; 64 64 32];
+%
+%   dws = dwiGet(dwi,'diffusion data acpc',coords);
+%
+%   ADC = dwiGet(dwi,'adc data image',coords);
+%
+%   SNR = dwiGet(dwi,'b0 snr',coords);
+%
+% See also:  dwiCreate, dwiSet, dtiGet, dtiSet, dtiCreate
+
+
 % Take all voxels 
-coords = horzcat(small_fg.fibers{:});
+VOI_coords = horzcat(small_fg.fibers{:});
 % transform in img space 
-coords = unique(floor(mrAnatXformCoords(dwi.nifti.qto_ijk,coords)),'rows');
+VOI_coords = unique(floor(mrAnatXformCoords(dwi.nifti.qto_ijk,VOI_coords)),'rows');
 % Keep original index
-indx = sub2ind(dwi.nifti.dim(1:3),coords(:,1),coords(:,2),coords(:,3));
+indx = sub2ind(dwi.nifti.dim(1:3),VOI_coords(:,1),VOI_coords(:,2),VOI_coords(:,3));
 %% Get diffusion data from a fiber
-dSig    = dwiGet(dwi,'diffusion data image',coords);
+dSig    = dwiGet(dwi,'diffusion data image',VOI_coords);
 
 %% Compute the predicted signal by each tensors of each node in this voxel.
 
