@@ -1,7 +1,7 @@
 function CreatePredictedDiffusionNifti
 %% Use Franco's example data
 
-try, lifeDemoDataPath
+try lifeDemoDataPath
 catch
     error('Add life data to your path');
 end
@@ -11,8 +11,6 @@ end
 
 % Here are the original dMRI data
 dwiFile       = fullfile(lifeDemoDataPath('diffusion'),'life_demo_scan1_subject1_b2000_150dirs_stanford.nii.gz');
-
-
 dwiFileRepeat = fullfile(lifeDemoDataPath('diffusion'),'life_demo_scan2_subject1_b2000_150dirs_stanford.nii.gz');
 t1File        = fullfile(lifeDemoDataPath('anatomy'),  'life_demo_anatomy_t1w_stanford.nii.gz');
 
@@ -49,21 +47,34 @@ fe = feConnectomeInit(dwiFile, small_fg, feFileName,fullfile(fileparts(fgFileNam
 %fe = feConnectomeInit(dwiFile, fgFileName, feFileName,fullfile(fileparts(fgFileName)),dwiFileRepeat,t1File);
 
 %% Fit the model with global weights.
+
 fe = feSet(fe,'fit',feFitModel(feGet(fe,'mfiber'),feGet(fe,'dsigdemeaned'),'bbnnls'));
-% the weights from the LiFE solution
+%% the weights from the LiFE solution
+
 wgts = feGet(fe,'fiber weights');
 
 
 %% Make an empty nifti file the same size as the original
-pNifti = niftiCreate;
+% pNifti = niftiCreate;
 pData = zeros(size(nifti.data));
 
+% duplicate original nifti structure 
+pNifti      = nifti;
+pNifti.data = pData;
+
+% strip .extension
+[p,f] = fileparts(pNifti.fname);
+[~,f] = fileparts(f);
+
+% give name to pNifti
+niftiSet(pNifti,'filepath',[p,f,'_Predicted.nii.gz']);
 %% Compute the diffusion tensors for each node in each fiber
 
 % The direction at the node is the average direction between this node and
-% each of its neighbors
+% each of its neighbors% Isotropic portion of M matrix. Returns the matrix for the full model or
+
 % The diagonal parameters are for a perfect stick, [1 0 0]
-Q = feComputeCanonicalDiffusion(fe.fg.fibers, [1 0 0]); % Q =voxTensors;
+Q = feComputeCanonicalDiffusion(fe.fg.fibers, [1 0 0]);  % Q = feGet(fe,''fibers tensors');
 
 %% Add diffusion signal for each fiber coordinate
 
@@ -71,16 +82,16 @@ Q = feComputeCanonicalDiffusion(fe.fg.fibers, [1 0 0]); % Q =voxTensors;
 % We are not sure how to get the S0 value out of the b=0 (non-diffusion
 % weighted) image
 oneFiber = floor(fe.fg.fibers{1});
-
+% VOI_coords = feGet(fe,'roi coords')
 % We want the S0 from the raw data, and then we want the S0 values for each
 % voxel in the fiber
-% S0 = feGet(fe,'b0 signal image');
-feGet(fe,'voxels indices',fe.fg.fibers)
+S0 = feGet(fe,'b0 signal image');
+% feGet(fe,'voxels indices',fe.fg.fibers)
 
-val = feGet(fe,'b0 signal image',int32(oneFiber));
+% val = feGet(fe,'b0 signal image',int32(oneFiber));
   
 % Once we get the S0 values for this particular voxel, we can compute
-voxDSig = feComputeSignal(S0, bvecs', bvals(:), Q{1});
+voxDSig = feComputeSignal(S0(1), bvecs', bvals(:), Q{1});
 
 for ii=1:length(oneFiber)
     for jj=1:length(bvec)
@@ -92,6 +103,59 @@ end
 
 pNifti = niftiSet(pNifti,'data',pData);
 
+%% Test script
+%---------
+% Fiber density statistics.
+% Computes the fiber density (how many fibers in each voxel)
+% We compute the following values:
+% (1) The number of fibers in each voxel
+% (2) The number of unique fibers with non-zero weights
+% (3) The sum of the weights in each voxel
+% (4) The mean of the weights in each voxel
+% (5) The variance of the weigths in each voxel
+
+FiberStats = feGet(fe,'fiberdensity');
+
+
+%---------
+% Given an VOI finds the indices of the matching voxels inside the big
+% volume, which ordinarily represents the full connectome.
+%
+foundVoxels = feGet(fe,'find voxels',coords);
+%
+% coords is a Nx3 set of coordinates in image space
+% foundVoxels is a vector of 1's and 0's, there is a one for each
+% location the the connectome coordinates for which there is a match in
+% the coords
+
+
+% We are not sure about which coordinate is the xyz
+% We are not sure how to get the S0 value out of the b=0 (non-diffusion
+% weighted) image
+oneFiber = floor(fe.fg.fibers{1});
+
+VOI_coords = feGet(fe,'roi coords');
+
+
+% We want the S0 from the raw data, and then we want the S0 values for each
+% voxel in the fiber
+S0 = feGet(fe,'b0 signal image');
+% feGet(fe,'voxels indices',fe.fg.fibers)
+
+% val = feGet(fe,'b0 signal image',int32(oneFiber));
+  
+% Once we get the S0 values for this particular voxel, we can compute
+voxDSig = feComputeSignal(S0(1), bvecs', bvals(:), Q{1});
+
+for ii=1:length(oneFiber)
+    for jj=1:length(bvec)
+        pData(oneFiber(1,1),oneFiber(2,1),oneFiber(3,1),jj) = ...
+            wgts(ii)*exp(-b*(bvec(jj)'*Q*bvec(jj))); 
+    end
+end
+
+
+pNifti = niftiSet(pNifti,'data',pData);
 %%
 % This returns a matrix that is size nBvecs x num_unique_fibers 
   voxelPSignal      = feComputeVoxelSignal(fe,1);
