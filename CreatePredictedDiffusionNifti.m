@@ -6,7 +6,6 @@ catch
     error('Add life data to your path');
 end
 
-
 %% Build the file names for the diffusion data, the anatomical MRI.
 
 % Here are the original dMRI data
@@ -80,12 +79,7 @@ Q = feComputeCanonicalDiffusion(fe.fg.fibers, [1 0 0]);  % Q = feGet(fe,''fibers
 % We are not sure about which coordinate is the xyz
 % We are not sure how to get the S0 value out of the b=0 (non-diffusion
 % weighted) image
-oneFiber = floor(fe.fg.fibers{1});
-
-% We want the S0 from the nifti data, 
-% and then we want the S0 values for each voxel in each fiber
-
-S0 = feGet(fe,'b0 signal image');
+% oneFiber = floor(fe.fg.fibers{1});
 
 % These coordinates are within the first fiber, and thus the connectome
 % This is an N x 3 matrix of integers, needed by feGet.
@@ -101,7 +95,8 @@ foundVoxels = feGet(fe,'find voxels',fCoords);
 
 % Once we get the S0 values for this particular voxel, we can compute
 S0 = feGet(fe,'b0 signal image');
-voxDSig = feComputeSignal(S0, bvecs', bvals(:), Q{1});
+%voxDSig = feComputeSignal(S0, bvecs', bvals(:), Q{1});
+voxDSig = feComputeSignal(S0, bvecs, bvals,  Q{1}(1,:));
 
 for ii=1:length(oneFiber)
     for jj=1:length(bvec)
@@ -109,7 +104,6 @@ for ii=1:length(oneFiber)
             wgts(ii)*feComputeSignal(S0, bvecs', bvals(:), Q{1}); 
     end
 end
-
 
 pNifti = niftiSet(pNifti,'data',pData);
 
