@@ -93,13 +93,54 @@ cCoords = uint32(feGet(fe,'roi coords'));
 % This takes an 
 foundVoxels = feGet(fe,'find voxels',fCoords);
 
-% Once we get the S0 values for this particular voxel, we can compute
-S0 = feGet(fe,'b0 signal image');
-%voxDSig = feComputeSignal(S0, bvecs', bvals(:), Q{1});
-voxDSig = feComputeSignal(S0, bvecs, bvals,  Q{1}(1,:));
+% %% Take voxel tensor from Q structure
+% %   case {'voxeltensors','voxtensors','voxq'}
+%     % val = feGet(fe,'voxtensors',voxelIndex)
+%     % val = feGet(fe,'voxtensors',coord)
+%     
+%     % Index for the voxel
+%     vv = feGet(fe,'voxelsindices',foundVoxels(1));
+%     
+%     % The indexes of the voxeles used, to build LiFE.
+%     usedVoxels = feGet(fe,'usedVoxels');
+%     voxIndex   = usedVoxels(vv);
+%     nNodes     = feGet(fe,'nNodes');
+%     
+%     % Get the tensors for each node in each fiber going through this voxel:
+%     val = zeros(nNodes(voxIndex), 9); % Allocate space for all the tensors (9 is for the 3 x 3 tensor components)
+%     for ii = 1:nNodes(voxIndex)           % Get the tensors
+%       val(ii,:) = Q{fe.voxel2FNpair{voxIndex}(ii,1)} ...
+%         (fe.voxel2FNpair{voxIndex}(ii,2),:);
+%     end
+% 
 
-for ii=1:length(oneFiber)
-    for jj=1:length(bvec)
+%%
+for jj = 1:length(foundVoxels)
+    % Once we get the S0 values for this particular voxel, we can compute
+    S0 = feGet(fe,'b0 signal image',foundVoxels(jj));
+    fe_bvecs             = feGet(fe,'bvecs');
+    fe_bvals             = feGet(fe,'bvals');
+    voxTesorQ = feGet(fe,'voxel tensors',foundVoxels(jj));
+    %voxDSig = feComputeSignal(S0, bvecs', bvals(:), Q{1});
+    voxDSig = feComputeSignal(S0, fe_bvecs, fe_bvals, voxTesorQ);
+end
+
+% Size; S0 [1,1], bvecs[96, 3], bvals[96, 1] , Q[2,9]
+
+%%
+for ii=1:length(foundVoxels)
+    for jj=1:length(fe_bvecs)
+        pData(oneFiber(1,1),oneFiber(2,1),oneFiber(3,1),jj) = ...
+            wgts(ii)*feComputeSignal(S0, bvecs', bvals(:), Q{1}); 
+    end
+end
+
+pNifti = niftiSet(pNifti,'data',pData);
+
+
+%%
+for ii=1:length(foundVoxels)
+    for jj=1:length(bvecs)
         pData(oneFiber(1,1),oneFiber(2,1),oneFiber(3,1),jj) = ...
             wgts(ii)*feComputeSignal(S0, bvecs', bvals(:), Q{1}); 
     end
@@ -200,7 +241,7 @@ dSig    = dwiGet(dwi,'diffusion data image',coords);
 
 %% Compute the predicted signal by each tensors of each node in this voxel.
 
-S0                = feGet(fe,'b0signalimage');
+S0                = feGet(fe,'b0signalimage',usedVoxels);
 bvecs             = feGet(fe,'bvecs');                      % bvecs
 bvals             = feGet(fe,'bvals');                      % bvals
 tot_fibers_num    = feGet(fe,'tot f num');  % number of total fibers in the voxel
