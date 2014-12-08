@@ -79,7 +79,8 @@ Q = feComputeCanonicalDiffusion(fe.fg.fibers, [1 0 0]);  % Q = feGet(fe,''fibers
 % We are not sure about which coordinate is the xyz
 % We are not sure how to get the S0 value out of the b=0 (non-diffusion
 % weighted) image
-% oneFiber = floor(fe.fg.fibers{1});
+
+nFibers =1;
 
 % These coordinates are within the first fiber, and thus the connectome
 % This is an N x 3 matrix of integers, needed by feGet.
@@ -87,45 +88,30 @@ Q = feComputeCanonicalDiffusion(fe.fg.fibers, [1 0 0]);  % Q = feGet(fe,''fibers
 % ROI.  But it is obviously ridiculous and if we have to have a difference
 % in the coordinate frames, then there has to be a roi2fg() coordinate
 % transform.  We can't write code like this everywhere.
-fCoords = ((uint32(ceil(fe.fg.fibers{1})))+1)';
+fCoords = ((uint32(ceil(fe.fg.fibers{nFibers})))+1)';
 cCoords = uint32(feGet(fe,'roi coords'));
 
 % This takes an 
 foundVoxels = feGet(fe,'find voxels',fCoords);
 
-% %% Take voxel tensor from Q structure
-% %   case {'voxeltensors','voxtensors','voxq'}
-%     % val = feGet(fe,'voxtensors',voxelIndex)
-%     % val = feGet(fe,'voxtensors',coord)
-%     
-%     % Index for the voxel
-%     vv = feGet(fe,'voxelsindices',foundVoxels(1));
-%     
-%     % The indexes of the voxeles used, to build LiFE.
-%     usedVoxels = feGet(fe,'usedVoxels');
-%     voxIndex   = usedVoxels(vv);
-%     nNodes     = feGet(fe,'nNodes');
-%     
-%     % Get the tensors for each node in each fiber going through this voxel:
-%     val = zeros(nNodes(voxIndex), 9); % Allocate space for all the tensors (9 is for the 3 x 3 tensor components)
-%     for ii = 1:nNodes(voxIndex)           % Get the tensors
-%       val(ii,:) = Q{fe.voxel2FNpair{voxIndex}(ii,1)} ...
-%         (fe.voxel2FNpair{voxIndex}(ii,2),:);
-%     end
-% 
+% take S0 image 
+S0 = feGet(fe,'b0 signal image');% S0 = fe.diffusion_S0_img; Still
 
-%%
+%     Q{nFinbers}(nNodes,:);
+
 for jj = 1:length(foundVoxels)
     % Once we get the S0 values for this particular voxel, we can compute
-    S0 = feGet(fe,'b0 signal image',foundVoxels(jj));
     fe_bvecs             = feGet(fe,'bvecs');
     fe_bvals             = feGet(fe,'bvals');
-    voxTesorQ = feGet(fe,'voxel tensors',foundVoxels(jj));
+    voxTesorQ = Q{nFinber}{jj,:};%feGet(fe,'voxel tensors',foundVoxels(jj));
     %voxDSig = feComputeSignal(S0, bvecs', bvals(:), Q{1});
-    voxDSig = feComputeSignal(S0, fe_bvecs, fe_bvals, voxTesorQ);
+    voxDSig{nFiber,jj} = feComputeSignal(S0(foundVoxels(jj)), fe_bvecs, fe_bvals, voxTesorQ);
+%     voxDSig2 = feComputeSignal(S0, bvecs', bvals', voxTesorQ);
 end
 
 % Size; S0 [1,1], bvecs[96, 3], bvals[96, 1] , Q[2,9]
+% fe_bvals and S0 are still unclear  
+nifti.data(73,29,33,:)
 
 %%
 for ii=1:length(foundVoxels)
