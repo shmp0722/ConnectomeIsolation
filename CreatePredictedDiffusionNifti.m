@@ -115,6 +115,30 @@ for ii = 1:length(fe.fg.fibers);
     clear S0, clear indx
 end
 
+% %% weights
+% for ii = 1:length(fe.fg.fibers);
+%     
+%     % These coordinates are within the first fiber, and thus the connectome
+%     % This is an N x 3 matrix of integers, needed by feGet.
+%     % This way of getting the fiber coordinates matches the coordinates in the
+%     % ROI.  But it is obviously ridiculous and if we have to have a difference
+%     % in the coordinate frames, then there has to be a roi2fg() coordinate
+%     % transform.  We can't write code like this everywhere.
+%     fCoords = ((uint32(ceil(fe.fg.fibers{ii})))+1)';
+%     
+%     % take S0 image
+%     S0 = dwiGet(dwi,'b0 image',fCoords); % S0_All = fe.diffusion_S0_img;    
+%    
+%     %% Compute predicted diffusion direction    
+%      
+%     for jj = 1:length(fCoords)
+%         voxTesor = Q{ii}(jj,:);
+%         pData(fCoords(jj,1),fCoords(jj,2),fCoords(jj,3),1:length(fe_bvecs2)) =...
+%             wgts(ii)*feComputeSignal(S0(jj), fe_bvecs2, fe_bvals2, voxTesor);
+%     end
+%     clear S0, clear indx
+% end 
+
 %% Put pSig in nifti structure
 pNifti = niftiSet(pNifti,'data',pData);
 
