@@ -29,7 +29,7 @@ fgFileName    = fullfile(lifeDemoDataPath('tractography'), ...
 
 fg = fgRead(fgFileName);
 small_fg = fgCreate('name', ['small_' fg.name], 'fibers', fg.fibers(1:10));
-small_fg.pathwayInfo = fg.pathwayInfo(1:10)save_flag;
+small_fg.pathwayInfo = fg.pathwayInfo(1:10);
 % fgWrite(small_fg, fullfile(lifeDemoDataPath('diffusion'), 'small_fg.mat'));
 
 clear fg
@@ -59,7 +59,7 @@ fe = feSet(fe,'fit',feFitModel(feGet(fe,'mfiber'),feGet(fe,'dsigdemeaned'),'bbnn
 
 wgts = feGet(fe,'fiber weights');
 
-save_flag
+
 %% Make an empty nifti file the same size as the original
 % pNifti = niftiCreate;
 pData = zeros(size(nifti.data));
@@ -71,16 +71,16 @@ pNifti.data = pData;
 % strip .extension
 [p,f] = fileparts(pNifti.fname);
 [~,f] = fileparts(f);
-newFname = [p,f,'_Predicted.nii.gz'];
+
 % give name to pNifti
-pNifti.fname = newFname;
+niftiSet(pNifti,'filepath',[p,f,'_Predicted.nii.gz']);
 %% Compute the diffusion tensors for each node in each fiber
 
 % The direction at the node is the average direction between this node and
 % each of its neighbors% Isotropic portion of M matrix. Returns the matrix for the full model or
 
 % The diagonal parameters are for a perfect stick, [1 0 0]
-Q = feComputeCanonicalDiffusion(fe.fg.fibersave_flags, [1 0 0]);  % Q = feGet(fe,''fibers tensors');
+Q = feComputeCanonicalDiffusion(fe.fg.fibers, [1 0 0]);  % Q = feGet(fe,''fibers tensors');
 
 %% Add diffusion signal for each fiber coordinate
 % We are not sure about which coordinate is the xyz
@@ -118,12 +118,10 @@ end
 %% Put pSig in nifti structure
 pNifti = niftiSet(pNifti,'data',pData);
 
-return
-
-% save the nifti file 
 if save_flag,
-    niftiWrite(pNifti, pNifti.fname)
+    niftiWrite(pNifti,'PredicedDiffusionSignal.nii.gz')
 end
+return
 
 
 %%
