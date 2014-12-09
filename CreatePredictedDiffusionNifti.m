@@ -105,9 +105,10 @@ for ii = 1:length(fe.fg.fibers);
     
     for jj = 1:length(indx)
         voxTesor = Q{ii}(jj,:);
-        PSig_voxel2{ii,jj} = feComputeSignal(S0(jj), fe_bvecs2, fe_bvals2, voxTesor);
+%         PSig_voxel2{ii,jj} = feComputeSignal(S0(jj), fe_bvecs2, fe_bvals2, voxTesor);
+        pData(indx(jj),1:106) =feComputeSignal(S0(jj), fe_bvecs2, fe_bvals2, voxTesor);
     end
-    clear S0
+    clear S0, clear indx;
 end
 
 %%
