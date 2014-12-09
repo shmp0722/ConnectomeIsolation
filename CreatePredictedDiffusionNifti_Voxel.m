@@ -1,10 +1,12 @@
-function CreatePredictedDiffusionNifti_Voxel(fg, dwi)
-%% Use Franco's example data
-
-try lifeDemoDataPath
-catch
-    error('Add life data to your path');
-end
+function [pSig_nifti] = CreatePredictedDiffusionNifti_Voxel(fg, dwiFile,dwiFileRepeat)
+% This function returns nifti file of predicted difusion signal
+% 
+%  [pSig_nifti] = CreatePredictedDiffusionNifti_Voxel(fg, dwi)
+% 
+% Imput
+%  fg = fgRead(fg), fg
+%
+% SO @ Vista lab, 2014
 
 %% Build the file names for the diffusion data, the anatomical MRI.
 
@@ -13,35 +15,27 @@ dwiFile       = fullfile(lifeDemoDataPath('diffusion'),'life_demo_scan1_subject1
 dwiFileRepeat = fullfile(lifeDemoDataPath('diffusion'),'life_demo_scan2_subject1_b2000_150dirs_stanford.nii.gz');
 t1File        = fullfile(lifeDemoDataPath('anatomy'),  'life_demo_anatomy_t1w_stanford.nii.gz');
 
-%% Create dwi structure
-
-nifti = niftiRead(dwiFile);
-bvecs =   dlmread(fullfile(lifeDemoDataPath('diffusion'),'life_demo_scan1_subject1_b2000_150dirs_stanford.bvecs'));
-bvals =   dlmread(fullfile(lifeDemoDataPath('diffusion'),'life_demo_scan1_subject1_b2000_150dirs_stanford.bvals'));
-
-dwi   = dwiCreate('nifti',nifti,'bvecs',bvecs,'bvals',bvals);
-
+%% retreive bvals, bvecs from dwi structure
+if ischar(dwi),
+    dwi = niftiRead(dwi);
+elseif isstruct(dwi);
+    dwi =dwi;
+end
+bvecs =   dwi.bvecs;
+bvals =   dwi.bvals;
 %% Take the first 10 fibers from the fiber group
 
-% This is intended to run quickly
-fgFileName    = fullfile(lifeDemoDataPath('tractography'), ...
-                'life_demo_mrtrix_csd_lmax10_probabilistic.mat');
-
-fg = fgRead(fgFileName);
-small_fg = fgCreate('name', ['small_' fg.name], 'fibers', fg.fibers(1:10));
-small_fg.pathwayInfo = fg.pathwayInfo(1:10);
-% fgWrite(small_fg, fullfile(lifeDemoDataPath('diffusion'), 'small_fg.mat'));
-
-clear fg
-
-% small_fg.fibers{ii} are the coordinates in ACPC space
-
+if ischar(fg),
+    fg = niftiRead(fg);
+elseif isstruct(fg);
+    fg =fg;
+end
 %% Build a model of the connectome.
 %
 % Running with the issue2 branch on LiFE
 
-feFileName    = 'life_build_model_demo_CSD_PROB_small';
-fe = feConnectomeInit(dwiFile, small_fg, feFileName,fullfile(fileparts(fgFileName)),dwiFileRepeat,t1File);
+feFileName    = 'tmp_fe';
+fe = feConnectomeInit(dwiFile, fg, feFileName,fullfile(fileparts(fgFileName)),dwiFileRepeat,t1File);
 %fe = feConnectomeInit(dwiFile, fgFileName, feFileName,fullfile(fileparts(fgFileName)),dwiFileRepeat,t1File);
 
 %% Fit the model with global weights.
@@ -49,7 +43,8 @@ fe = feConnectomeInit(dwiFile, small_fg, feFileName,fullfile(fileparts(fgFileNam
 fe = feSet(fe,'fit',feFitModel(feGet(fe,'mfiber'),feGet(fe,'dsigdemeaned'),'bbnnls'));
 %% the weights from the LiFE solution
 
-wgts = feGet(fe,'fiber weights');
+% how can we get weights without runnning whole LiFE sequence?
+wgts = feGet(fe,'fiber weights'); 
 
 
 %% Make an empty nifti file the same size as the original

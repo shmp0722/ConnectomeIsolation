@@ -25,7 +25,7 @@ dwi   = dwiCreate('nifti',nifti,'bvecs',bvecs,'bvals',bvals);
 
 % This is intended to run quickly
 fgFileName    = fullfile(lifeDemoDataPath('tractography'), ...
-                'life_demo_mrtrix_csd_lmax10_probabilistic.mat');
+    'life_demo_mrtrix_csd_lmax10_probabilistic.mat');
 
 fg = fgRead(fgFileName);
 small_fg = fgCreate('name', ['small_' fg.name], 'fibers', fg.fibers(1:10));
@@ -56,7 +56,7 @@ wgts = feGet(fe,'fiber weights');
 % pNifti = niftiCreate;
 pData = zeros(size(nifti.data));
 
-% duplicate original nifti structure 
+% duplicate original nifti structure
 pNifti      = nifti;
 pNifti.data = pData;
 
@@ -75,95 +75,92 @@ niftiSet(pNifti,'filepath',[p,f,'_Predicted.nii.gz']);
 Q = feComputeCanonicalDiffusion(fe.fg.fibers, [1 0 0]);  % Q = feGet(fe,''fibers tensors');
 
 %% Add diffusion signal for each fiber coordinate
-
 % We are not sure about which coordinate is the xyz
 % We are not sure how to get the S0 value out of the b=0 (non-diffusion
 % weighted) image
 
-% nFibers = length(fe.fg.fibers);
- nFibers =1;
+%%
+fe_bvecs2             = bvecs'; %feGet(fe,'bvecs');
+fe_bvals2             = bvals'./1000; %feGet(fe,'bvals');
 
-% These coordinates are within the first fiber, and thus the connectome
-% This is an N x 3 matrix of integers, needed by feGet.
-% This way of getting the fiber coordinates matches the coordinates in the
-% ROI.  But it is obviously ridiculous and if we have to have a difference
-% in the coordinate frames, then there has to be a roi2fg() coordinate
-% transform.  We can't write code like this everywhere.
-fCoords = ((uint32(ceil(fe.fg.fibers{nFibers})))+1)';
-% cCoords = uint32(feGet(fe,'roi coords'));
-
-% This takes an 
-foundVoxels = feGet(fe,'find voxels',fCoords);
-
-% take S0 image 
-% S0 = feGet(fe,'b0 signal image'); % All
-S0 = dwiGet(dwi,'b0 image',fCoords);
-%  S0_All = fe.diffusion_S0_img; 
-%  S0_voxel = dwiGet(dwi,'b0 image',fCoords(1,:));
-
-
-%         % Return an S0 value for each voxel in coords
-%         % Coords are in the rows (i.e., nCoords x 3)
-%         if ~isempty(varargin), coords = varargin{1};
-%         else error('coords required');
-%         end
-%         coords = coordCheck(coords);
-%         
-%         % Indices of the coords in the 3D volume.
-%         indx = sub2ind(dwi.nifti.dim(1:3),coords(:,1),coords(:,2),coords(:,3));
-%         b0 = dwiGet(dwi,'b0 image nums');
-%         val = zeros(size(coords,1),length(b0));
-%         for ii = 1:length(b0)
-%             tmp = squeeze(dwi.nifti.data(:,:,:,b0(ii)));
-%             val(:,ii) = tmp(indx);
-%         end
-
-%     Q{nFinbers}(nNodes,:);
-
-fe_bvecs             = feGet(fe,'bvecs');
-fe_bvals             = feGet(fe,'bvals');
-
-for jj = 1:length(foundVoxels)
-    % Once we get the S0 values for this particular voxel, we can compute
-   
-    voxTesorQ = Q{nFibers}(jj,:);
-    % voxTesorQ = feGet(fe,'voxel tensors',foundVoxels(jj));
-    % TensorVoxel = dwiGet(dwi,'tensor image', fCoords(jj,:)); ??
-
-    voxPSig{nFibers,jj} = feComputeSignal(S0(jj), fe_bvecs, fe_bvals, voxTesorQ);
+%% nFibers = length(fe.fg.fibers);
+for ii = 1:length(fe.fg.fibers);
+    
+    % These coordinates are within the first fiber, and thus the connectome
+    % This is an N x 3 matrix of integers, needed by feGet.
+    % This way of getting the fiber coordinates matches the coordinates in the
+    % ROI.  But it is obviously ridiculous and if we have to have a difference
+    % in the coordinate frames, then there has to be a roi2fg() coordinate
+    % transform.  We can't write code like this everywhere.
+    fCoords = ((uint32(ceil(fe.fg.fibers{ii})))+1)';
+    
+    % take S0 image
+    S0 = dwiGet(dwi,'b0 image',fCoords); % S0_All = fe.diffusion_S0_img;
+    
+    % keep indices of the coords in img space.
+    indx = sub2ind(dwi.nifti.dim(1:3),fCoords(:,1),fCoords(:,2),fCoords(:,3));
+    
+    %     sVovel = ind2sub(dwi.nifti.dim(1:3) , indx(jj))
+    %% 106 (96 diffusion direction + 10 b0)
+    
+    for jj = 1:length(indx)
+        voxTesor = Q{ii}(jj,:);
+        PSig_voxel2{ii,jj} = feComputeSignal(S0(jj), fe_bvecs2, fe_bvals2, voxTesor);
+    end
+    clear S0
 end
 
-% Size; S0 [1,1], bvecs[96, 3], bvals[96, 1] , Q[2,9]
-% fe_bvals and S0 are still unclear  
-nifti.data(73,29,33,:)
+%%
+pNifti = niftiSet(pNifti,'data',pData);
 
-% for ii = 1:length(b0)
-%     tmp = squeeze(dwi.nifti.data(:,:,:,b0(ii)));
-%     val(:,ii) = tmp(indx);
-% end
+return
+
+%% -- Just keeping idea
 
 
 
 %%
-for ii=1:length(foundVoxels)
+for ii=1:length(nVoxels)
     for jj=1:length(fe_bvecs)
         pData(oneFiber(1,1),oneFiber(2,1),oneFiber(3,1),jj) = ...
-            wgts(ii)*feComputeSignal(S0, bvecs', bvals(:), Q{1}); 
+            wgts(ii)*feComputeSignal(S0, bvecs', bvals(:), Q{1});
     end
 end
 
 pNifti = niftiSet(pNifti,'data',pData);
 
 
-%%
-for ii=1:length(foundVoxels)
-    for jj=1:length(bvecs)
-        pData(oneFiber(1,1),oneFiber(2,1),oneFiber(3,1),jj) = ...
-            wgts(ii)*feComputeSignal(S0, bvecs', bvals(:), Q{1}); 
-    end
-end
+%% 96 diffusion direction only
+fe_bvecs             = feGet(fe,'bvecs');
+fe_bvals             = bvals(dwi.bvals ~= 0)'./1000; %feGet(fe,'bvals');
 
-pNifti = niftiSet(pNifti,'data',pData);
+for ii = 1:length(fe.fg.fibers);
+    
+    % These coordinates are within the first fiber, and thus the connectome
+    % This is an N x 3 matrix of integers, needed by feGet.
+    % This way of getting the fiber coordinates matches the coordinates in the
+    % ROI.  But it is obviously ridiculous and if we have to have a difference
+    % in the coordinate frames, then there has to be a roi2fg() coordinate
+    % transform.  We can't write code like this everywhere.
+    fCoords = ((uint32(ceil(fe.fg.fibers{ii})))+1)';
+    
+    % take S0 image
+    S0 = dwiGet(dwi,'b0 image',fCoords); % S0_All = fe.diffusion_S0_img;
+    
+    % keep indices of the coords in img space.
+    indx = sub2ind(dwi.nifti.dim(1:3),fCoords(:,1),fCoords(:,2),fCoords(:,3));
+    
+    for jj = 1:length(S0)
+        % Once we get the S0 values for this particular voxel, we can compute
+        
+        voxTesorQ = Q{ii}(jj,:);
+        % voxTesorQ = feGet(fe,'voxel tensors',foundVoxels(jj));
+        % TensorVoxel = dwiGet(dwi,'tensor image', fCoords(jj,:)); ??
+        
+        PSig_voxel{ii,jj} = feComputeSignal(S0(jj), fe_bvecs, fe_bvals, voxTesorQ);
+    end
+    clear S0, clear indx
+end
 
 %% Test script
 %---------
@@ -178,105 +175,12 @@ pNifti = niftiSet(pNifti,'data',pData);
 
 FiberStats = feGet(fe,'fiberdensity');
 
-
-%---------
-% Given an VOI finds the indices of the matching voxels inside the big
-% volume, which ordinarily represents the full connectome.
-%
-foundVoxels = feGet(fe,'find voxels',coords);
-%
-% coords is a Nx3 set of coordinates in image space
-% foundVoxels is a vector of 1's and 0's, there is a one for each
-% location the the connectome coordinates for which there is a match in
-% the coords
-
-
-% We are not sure about which coordinate is the xyz
-% We are not sure how to get the S0 value out of the b=0 (non-diffusion
-% weighted) image
-oneFiber = floor(fe.fg.fibers{1});
-
-VOI_coords = feGet(fe,'roi coords');
-
-
-% We want the S0 from the raw data, and then we want the S0 values for each
-% voxel in the fiber
-S0 = feGet(fe,'b0 signal image');
-% feGet(fe,'voxels indices',fe.fg.fibers)
-
-% val = feGet(fe,'b0 signal image',int32(oneFiber));
-  
-% Once we get the S0 values for this particular voxel, we can compute
-voxPSig = feComputeSignal(S0(1), bvecs', bvals(:), Q{1});
-
-for ii=1:length(oneFiber)
-    for jj=1:length(bvec)
-        pData(oneFiber(1,1),oneFiber(2,1),oneFiber(3,1),jj) = ...
-            wgts(ii)*exp(-b*(bvec(jj)'*Q*bvec(jj))); 
-    end
-end
-
-
-pNifti = niftiSet(pNifti,'data',pData);
 %%
-% This returns a matrix that is size nBvecs x num_unique_fibers 
-  voxelPSignal      = feComputeVoxelSignal(fe,1);
-  voxTensors        = feGet(fe,'voxeltensors', 1);  % Get the tensors for each node in each fiber 
-
-% Index for the voxel
-%     vv = feGet(fe,'voxelsindices');
-    
-    nVoxels = feGet(fe,'n voxels'); % Number of voxels in the connectome/VOI
-    
-    
-    val = fe.diffusion_S0_img(feGet(fe,'voxelsindices',nVoxels), :);
-    
-    vv = 1:nVoxels;
-    usedVoxels = feGet(fe,'usedVoxels');
-    voxIndex   = usedVoxels(vv);
-    nNodes     = feGet(fe,'nNodes');
-    
-     % Get the tensors for each node in each fiber going through this voxel:
-    val = zeros(nNodes(voxIndex), 9); % Allocate space for all the tensors (9 is for the 3 x 3 tensor components)
-    for ii = 1:nNodes(voxIndex)           % Get the tensors
-      val(ii,:) = fe.fibers.tensors{fe.voxel2FNpair{voxIndex}(ii,1)} ...
-        (fe.voxel2FNpair{voxIndex}(ii,2),:);
-    end
-
-%% 
-feFileName    = 'life_build_model_demo_CSD_PROB_small';
-
-%% dwi Get
-% Take all voxels 
-coords = horzcat(small_fg.fibers{:});
-% transform in img space 
-coords = unique(floor(mrAnatXformCoords(dwi.nifti.qto_ijk,coords)),'rows');
 % Keep original index
 indx = sub2ind(dwi.nifti.dim(1:3),coords(:,1),coords(:,2),coords(:,3));
-%% Get diffusion data from a fiber
-dSig    = dwiGet(dwi,'diffusion data image',coords);
 
-%% Compute the predicted signal by each tensors of each node in this voxel.
 
-S0                = feGet(fe,'b0signalimage',usedVoxels);
-bvecs             = feGet(fe,'bvecs');                      % bvecs
-bvals             = feGet(fe,'bvals');                      % bvals
-tot_fibers_num    = feGet(fe,'tot f num');  % number of total fibers in the voxel
-unique_fibers_num = feGet(fe,'unique f num',    usedVoxels);  % number of unique fibers in the voxel
-tot_fiber_index   = cell2mat(feGet(fe,'totf',   usedVoxels)); % indexes to the total fibers in the voxels
-unique_fiber_index= cell2mat(feGet(fe,'uniquef',usedVoxels)); % indexes to the unique fibers in the voxels
-voxTensors        = feGet(fe,'voxeltensors',usedVoxels);
 
-Q = feComputeCanonicalDiffusion(small_fg.fibers, [1 0 0]); % Q =voxTensors;
 
-voxPSig = feComputeSignal(S0, bvecs, bvals, Q);
-
-%%
-% Indexes of actually used voxels, this can be less than the number of
-% voxels int he ROI in case some voxels have no fibers in them
-usedVoxels   = feGet(fe,'usedVoxels');
-nVoxels      = length(usedVoxels);
-nBvecs       = feGet(fe,'nBvecs');
-vox_sparse_pSig = cell(nVoxels,1);
 
 
