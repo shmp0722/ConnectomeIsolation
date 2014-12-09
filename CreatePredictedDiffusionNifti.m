@@ -29,37 +29,34 @@ fgFileName    = fullfile(lifeDemoDataPath('tractography'), ...
 
 fg = fgRead(fgFileName);
 small_fg = fgCreate('name', ['small_' fg.name], 'fibers', fg.fibers(1:10));
-small_fg.pathwayInfo = fg.pathwayInfo(1:10)save_flag;
+small_fg.pathwayInfo = fg.pathwayInfo(1:10);
 % fgWrite(small_fg, fullfile(lifeDemoDataPath('diffusion'), 'small_fg.mat'));
 
 clear fg
 
-% small_fg.fibers{ii} are the coordinates in ACPC space
+% transform coordinates in image space form acpc
+small_fg_img = dtiXformFiberCoords(small_fg, inv(dwi.nifti.qto_xyz), 'img');
 
-%% If a fiber group structure was passed in instead
-% we assume that it was passed in in AC-PC coordinates 
-% (the default in mrDiffusion) we trasform  in IMAGE coordinates
+% img_coords  = horzcat(small_fg_img.fibers{:});
+% img_coords2 = horzcat(fe.fg.fibers{:}); These are identical
 
-small_fg_img = dtiXformFiberCoords(small_fg, dwi.nifti.qto_xyz,'img');
+% %% Build a model of the connectome.
+% %
+% % Running with the issue2 branch on LiFE
+% %
+% % If we don't need fiber weights, we can skip this
+% 
+% feFileName    = 'life_build_model_demo_CSD_PROB_small';
+% fe = feConnectomeInit(dwiFile, small_fg, feFileName,fullfile(fileparts(fgFileName)),dwiFileRepeat,t1File);
+% 
+% %% Fit the model with global weights.
+% 
+% fe = feSet(fe,'fit',feFitModel(feGet(fe,'mfiber'),feGet(fe,'dsigdemeaned'),'bbnnls'));
+% 
+% %% the weights from the LiFE solution
+% 
+% wgts = feGet(fe,'fiber weights');
 
-% mrAnatXformCoords(inv(dt.xformToAcpc), coords_unique)
-
-%% Build a model of the connectome.
-%
-% Running with the issue2 branch on LiFE
-
-feFileName    = 'life_build_model_demo_CSD_PROB_small';
-fe = feConnectomeInit(dwiFile, small_fg, feFileName,fullfile(fileparts(fgFileName)),dwiFileRepeat,t1File);
-%fe = feConnectomeInit(dwiFile, fgFileName, feFileName,fullfile(fileparts(fgFileName)),dwiFileRepeat,t1File);
-
-%% Fit the model with global weights.
-
-fe = feSet(fe,'fit',feFitModel(feGet(fe,'mfiber'),feGet(fe,'dsigdemeaned'),'bbnnls'));
-%% the weights from the LiFE solution
-
-wgts = feGet(fe,'fiber weights');
-
-save_flag
 %% Make an empty nifti file the same size as the original
 % pNifti = niftiCreate;
 pData = zeros(size(nifti.data));
@@ -80,8 +77,8 @@ pNifti.fname = newFname;
 % each of its neighbors% Isotropic portion of M matrix. Returns the matrix for the full model or
 
 % The diagonal parameters are for a perfect stick, [1 0 0]
-Q = feComputeCanonicalDiffusion(fe.fg.fibersave_flags, [1 0 0]);  % Q = feGet(fe,''fibers tensors');
-
+Q = feComputeCanonicalDiffusion(small_fg_img, [1 0 0]);  % Q = feGet(fe,''fibers tensors');
+% Q = feComputeCanonicalDiffusion_voxel(img_coords, [1 0 0]);
 %% Add diffusion signal for each fiber coordinate
 % We are not sure about which coordinate is the xyz
 % We are not sure how to get the S0 value out of the b=0 (non-diffusion
@@ -91,8 +88,8 @@ Q = feComputeCanonicalDiffusion(fe.fg.fibersave_flags, [1 0 0]);  % Q = feGet(fe
 fe_bvecs2             = bvecs'; %feGet(fe,'bvecs');
 fe_bvals2             = bvals'./1000; %feGet(fe,'bvals');
 
-%% nFibers = length(fe.fg.fibers);
-for ii = 1:length(fe.fg.fibers);
+%% Comupute prediction diffusion signals
+for ii = 1:length(small_fg_img.fibers);
     
     % These coordinates are within the first fiber, and thus the connectome
     % This is an N x 3 matrix of integers, needed by feGet.
@@ -100,17 +97,28 @@ for ii = 1:length(fe.fg.fibers);
     % ROI.  But it is obviously ridiculous and if we have to have a difference
     % in the coordinate frames, then there has to be a roi2fg() coordinate
     % transform.  We can't write code like this everywhere.
-    fCoords = ((uint32(ceil(fe.fg.fibers{ii})))+1)';
+    fCoords = ((uint32(ceil(small_fg_img.fibers{ii})))+1)';
     
     % take S0 image
     S0 = dwiGet(dwi,'b0 image',fCoords); % S0_All = fe.diffusion_S0_img;    
    
-    %% Compute predicted diffusion direction    
-    % i don't know how fiber weights = wgts(ii)* work (SO)  
+    %% Compute predicted diffusion direction in each voxel   
+    %
+    % But there is still issue should be considered. A voxel has more than two unique
+    % fibers.... Just overwriting now. how fiber wgts(ii)* work? (SO)  
+    
     for jj = 1:length(fCoords)
         voxTesor = Q{ii}(jj,:);
+        
         pData(fCoords(jj,1),fCoords(jj,2),fCoords(jj,3),1:length(fe_bvecs2)) =...
             feComputeSignal(S0(jj), fe_bvecs2, fe_bvals2, voxTesor);
+        
+%           pData(fCoords(jj,1),fCoords(jj,2),fCoords(jj,3),1:length(fe_bvecs2)) =...
+%             wgts(ii)*feComputeSignal(S0(jj), fe_bvecs2, fe_bvals2, voxTesor);        
+        
+        % OK, keep PSig based on fibers
+        PSig_voxel{ii,jj} = feComputeSignal(S0(jj), fe_bvecs, fe_bvals, voxTesorQ);
+
     end
     clear S0, clear indx
 end
@@ -142,37 +150,12 @@ end
 %% Put pSig in nifti structure
 pNifti = niftiSet(pNifti,'data',pData);
 
-return
-
 % save the nifti file 
 if save_flag,
     niftiWrite(pNifti, pNifti.fname)
 end
 
-
-%%
-for ii=1:length(fe.fg.fibers)
-    for jj=1:length(fe_bvecs2)
-        pData(oneFiber(1,1),oneFiber(2,1),oneFiber(3,1),jj) = ...
-            wgts(ii)*PSig_voxel2{ii,jj};
-    end
-end
-%%
-
 return
-
-% -------------
-% idea
-%
-for ii=1:length(fe.fg.fibers)
-    for jj=1:length(fe_bvecs)
-        pData(oneFiber(1,1),oneFiber(2,1),oneFiber(3,1),jj) = ...
-            wgts(ii)*feComputeSignal(S0(jj), fe_bvecs2, fe_bvals2, voxTesor);
-    end
-end
-
-pNifti = niftiSet(pNifti,'data',pData);
-
 
 %% 96 diffusion direction only
 fe_bvecs             = feGet(fe,'bvecs');
@@ -206,8 +189,7 @@ for ii = 1:length(fe.fg.fibers);
     clear S0, clear indx
 end
 
-%% Test script
-%---------
+%% ---------
 % Fiber density statistics.
 % Computes the fiber density (how many fibers in each voxel)
 % We compute the following values:
@@ -219,10 +201,6 @@ end
 
 FiberStats = feGet(fe,'fiberdensity');
 
-% keep indices of the coords in img space.
-
-indx = sub2ind(dwi.nifti.dim(1:3),fCoords(:,1),fCoords(:,2),fCoords(:,3));    
- %     sVovel = ind2sub(dwi.nifti.dim(1:3) , indx(jj))
 
 
 

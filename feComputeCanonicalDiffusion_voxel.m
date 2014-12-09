@@ -25,7 +25,7 @@ function Q = feComputeCanonicalDiffusion_voxel(fibers,dParms)
 % Copyright (2013-2014), Franco Pestilli, Stanford University, pestillifranco@gmail.com.
 
 % Preallocate
-nFibers = 1; % The number of Fibers.
+nFibers = length(fibers); % The number of Fibers.
 Q       = cell(1,nFibers); % Memory for the tensors of each fiber.
 D       = diag(dParms);    % The diagonal form of the Tensors' model parameters.
 
