@@ -19,7 +19,7 @@ nifti = niftiRead(dwiFile);
 bvecs =   dlmread(fullfile(lifeDemoDataPath('diffusion'),'life_demo_scan1_subject1_b2000_150dirs_stanford.bvecs'));
 bvals =   dlmread(fullfile(lifeDemoDataPath('diffusion'),'life_demo_scan1_subject1_b2000_150dirs_stanford.bvals'));
 
-dwi   = dwiCreate('nifti',nifti,'bvecs',bvecs,'bvals',bvals);
+dwi   = dwiCreate('nifti',nifti,'bvecs',bvecs','bvals',bvals');
 
 %% Take the first 10 fibers from the fiber group
 
@@ -40,22 +40,22 @@ small_fg_img = dtiXformFiberCoords(small_fg, inv(dwi.nifti.qto_xyz), 'img');
 % img_coords  = horzcat(small_fg_img.fibers{:});
 % img_coords2 = horzcat(fe.fg.fibers{:}); These are identical
 
-% %% Build a model of the connectome.
-% %
-% % Running with the issue2 branch on LiFE
-% %
-% % If we don't need fiber weights, we can skip this
-% 
-% feFileName    = 'life_build_model_demo_CSD_PROB_small';
-% fe = feConnectomeInit(dwiFile, small_fg, feFileName,fullfile(fileparts(fgFileName)),dwiFileRepeat,t1File);
-% 
-% %% Fit the model with global weights.
-% 
-% fe = feSet(fe,'fit',feFitModel(feGet(fe,'mfiber'),feGet(fe,'dsigdemeaned'),'bbnnls'));
-% 
-% %% the weights from the LiFE solution
-% 
-% wgts = feGet(fe,'fiber weights');
+%% Build a model of the connectome.
+%
+% Running with the issue2 branch on LiFE
+%
+% If we don't need fiber weights, we can skip this
+
+feFileName    = 'life_build_model_demo_CSD_PROB_small';
+fe = feConnectomeInit(dwiFile, small_fg, feFileName,fullfile(fileparts(fgFileName)),dwiFileRepeat,t1File);
+
+%% Fit the model with global weights.
+
+fe = feSet(fe,'fit',feFitModel(feGet(fe,'mfiber'),feGet(fe,'dsigdemeaned'),'bbnnls'));
+
+%% the weights from the LiFE solution
+
+wgts = feGet(fe,'fiber weights');
 
 %% Make an empty nifti file the same size as the original
 % pNifti = niftiCreate;
@@ -77,14 +77,15 @@ pNifti.fname = newFname;
 % each of its neighbors% Isotropic portion of M matrix. Returns the matrix for the full model or
 
 % The diagonal parameters are for a perfect stick, [1 0 0]
-Q = feComputeCanonicalDiffusion(small_fg_img, [1 0 0]);  % Q = feGet(fe,''fibers tensors');
+Q = feComputeCanonicalDiffusion(small_fg_img.fibers, [1 0 0]);  % Q = feGet(fe,''fibers tensors');
 % Q = feComputeCanonicalDiffusion_voxel(img_coords, [1 0 0]);
 %% Add diffusion signal for each fiber coordinate
 % We are not sure about which coordinate is the xyz
 % We are not sure how to get the S0 value out of the b=0 (non-diffusion
 % weighted) image
 
-%%
+%% Please explain
+
 fe_bvecs2             = bvecs'; %feGet(fe,'bvecs');
 fe_bvals2             = bvals'./1000; %feGet(fe,'bvals');
 
@@ -102,50 +103,44 @@ for ii = 1:length(small_fg_img.fibers);
     % take S0 image
     S0 = dwiGet(dwi,'b0 image',fCoords); % S0_All = fe.diffusion_S0_img;    
    
-    %% Compute predicted diffusion direction in each voxel   
+    % Compute predicted diffusion direction in each voxel   
     %
     % But there is still issue should be considered. A voxel has more than two unique
     % fibers.... Just overwriting now. how fiber wgts(ii)* work? (SO)  
     
     for jj = 1:length(fCoords)
-        voxTesor = Q{ii}(jj,:);
+        % For each fiber coordinate create a predicted signal.  Here is the
+        % fiber tensor at that coordinate
+        voxTensor = Q{ii}(jj,:);
         
-        pData(fCoords(jj,1),fCoords(jj,2),fCoords(jj,3),1:length(fe_bvecs2)) =...
-            feComputeSignal(S0(jj), fe_bvecs2, fe_bvals2, voxTesor);
+        % Add the new signal to the current signals at that coordinate
+        curSig = pData(fCoords(jj,1),fCoords(jj,2),fCoords(jj,3),1:length(fe_bvecs2));
+        newSig = wgts(ii)*feComputeSignal(S0(jj), fe_bvecs2, fe_bvals2, voxTensor);
         
-%           pData(fCoords(jj,1),fCoords(jj,2),fCoords(jj,3),1:length(fe_bvecs2)) =...
-%             wgts(ii)*feComputeSignal(S0(jj), fe_bvecs2, fe_bvals2, voxTesor);        
+        % Store back in
+        pData(fCoords(jj,1),fCoords(jj,2),fCoords(jj,3),1:length(fe_bvecs2)) = ...
+            squeeze(curSig) + newSig;
         
-        % OK, keep PSig based on fibers
-        PSig_voxel{ii,jj} = feComputeSignal(S0(jj), fe_bvecs, fe_bvals, voxTesorQ);
+        % BW to make the visualization work ... also, look over dwiSet/Get/Create
+        %
+        % tmp = feComputeSignal(S0(jj), fe_bvecs2, fe_bvals2, voxTensor);
+        % dwi = dwiSet(dwi,'sig',tmp)
+        % mrvNewGraphWin; dwiPlot(dwi,'adc',tmp(11:end),reshape(voxTensor,3,3)) 
+        % dwiPlot(dwi,'dsig image xy',tmp)
+        %
+        %           pData(fCoords(jj,1),fCoords(jj,2),fCoords(jj,3),1:length(fe_bvecs2)) =...
+        %             wgts(ii)*feComputeSignal(S0(jj), fe_bvecs2, fe_bvals2, voxTensor);
+        
+        % For the moment we are keeping everything, but we may not have to
+        % do this in the long run.
+        % OK, keep PSig based on fiber and voxel
+        % The empty slots have no fibers.
+        % The other slots of 106 diffusion signals predicted
+        PSig_voxel{ii,jj} = newSig;
 
     end
     clear S0, clear indx
 end
-
-% %% weights
-% for ii = 1:length(fe.fg.fibers);
-%     
-%     % These coordinates are within the first fiber, and thus the connectome
-%     % This is an N x 3 matrix of integers, needed by feGet.
-%     % This way of getting the fiber coordinates matches the coordinates in the
-%     % ROI.  But it is obviously ridiculous and if we have to have a difference
-%     % in the coordinate frames, then there has to be a roi2fg() coordinate
-%     % transform.  We can't write code like this everywhere.
-%     fCoords = ((uint32(ceil(fe.fg.fibers{ii})))+1)';
-%     
-%     % take S0 image
-%     S0 = dwiGet(dwi,'b0 image',fCoords); % S0_All = fe.diffusion_S0_img;    
-%    
-%     %% Compute predicted diffusion direction    
-%      
-%     for jj = 1:length(fCoords)
-%         voxTesor = Q{ii}(jj,:);
-%         pData(fCoords(jj,1),fCoords(jj,2),fCoords(jj,3),1:length(fe_bvecs2)) =...
-%             wgts(ii)*feComputeSignal(S0(jj), fe_bvecs2, fe_bvals2, voxTesor);
-%     end
-%     clear S0, clear indx
-% end 
 
 %% Put pSig in nifti structure
 pNifti = niftiSet(pNifti,'data',pData);
@@ -155,7 +150,11 @@ if save_flag,
     niftiWrite(pNifti, pNifti.fname)
 end
 
+% Let's figure out how to see what we created in the pNifti data set.
+
 return
+
+%% EXTRA REMOVE SOME DAY
 
 %% 96 diffusion direction only
 fe_bvecs             = feGet(fe,'bvecs');
