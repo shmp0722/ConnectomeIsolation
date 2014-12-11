@@ -139,7 +139,8 @@ for ii = 1:length(small_fg_img.fibers);
         PSig_voxel{ii,jj} = newSig;
 
     end
-    clear S0
+    clear S0, clear indx
+
 end
 
 %% Put pSig in nifti structure
