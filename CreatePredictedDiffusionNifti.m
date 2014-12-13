@@ -107,7 +107,7 @@ for ii = 1:length(small_fg_img.fibers);
     %
     % But there is still issue should be considered. A voxel has more than two unique
     % fibers.... Just overwriting now. how fiber wgts(ii)* work? (SO)  
-    
+
     for jj = 1:length(fCoords)
         % For each fiber coordinate create a predicted signal.  Here is the
         % fiber tensor at that coordinate
@@ -139,7 +139,7 @@ for ii = 1:length(small_fg_img.fibers);
         PSig_voxel{ii,jj} = newSig;
 
     end
-    clear S0, clear indx
+    clear S0
 end
 
 %% Put pSig in nifti structure
