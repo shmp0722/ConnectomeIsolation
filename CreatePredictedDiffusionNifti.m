@@ -104,16 +104,12 @@ for ii = 1:length(small_fg_img.fibers);
     S0 = dwiGet(dwi,'b0 image',fCoords); % S0_All = fe.diffusion_S0_img;    
    
     % Compute predicted diffusion direction in each voxel   
-    %
-    % But there is still issue should be considered. A voxel has more than two unique
-    % fibers.... Just overwriting now. how fiber wgts(ii)* work? (SO)  
-
     for jj = 1:length(fCoords)
         % For each fiber coordinate create a predicted signal.  Here is the
         % fiber tensor at that coordinate
         voxTensor = Q{ii}(jj,:);
         
-        % Add the new signal to the current signals at that coordinate
+        % Add the new signal to the current signals at that coordinate        
         curSig = pData(fCoords(jj,1),fCoords(jj,2),fCoords(jj,3),1:length(fe_bvecs2));
         newSig = wgts(ii)*feComputeSignal(S0(jj), fe_bvecs2, fe_bvals2, voxTensor);
         
@@ -123,11 +119,11 @@ for ii = 1:length(small_fg_img.fibers);
         
         % BW to make the visualization work ... also, look over dwiSet/Get/Create
         %
-        % tmp = feComputeSignal(S0(jj), fe_bvecs2, fe_bvals2, voxTensor);
-        % dwi = dwiSet(dwi,'sig',tmp)
-        % mrvNewGraphWin; dwiPlot(dwi,'adc',tmp(11:end),reshape(voxTensor,3,3)) 
-        % dwiPlot(dwi,'dsig image xy',tmp)
-        %
+        tmp = feComputeSignal(S0(jj), fe_bvecs2, fe_bvals2, voxTensor);
+        dwi2 = dwiSet(dwi,'sig',tmp);
+        mrvNewGraphWin; dwiPlot(dwi2,'adc',tmp(11:end),reshape(voxTensor,3,3)) 
+        dwiPlot(dwi2,'dsig image xy',tmp)
+        
         %           pData(fCoords(jj,1),fCoords(jj,2),fCoords(jj,3),1:length(fe_bvecs2)) =...
         %             wgts(ii)*feComputeSignal(S0(jj), fe_bvecs2, fe_bvals2, voxTensor);
         
@@ -141,6 +137,22 @@ for ii = 1:length(small_fg_img.fibers);
     end
     clear S0
 end
+
+%% Franco did get the pSig like this
+% Predicted measured signal from both fiber and iso
+    %
+    % pSig = feGet(fe,'pSig full')
+    % pSig = feGet(fe,'pSig full',coords)
+    % pSig = feGet(fe,'pSig full',voxelIndices)
+    val = [feGet(fe,'M fiber'), feGet(fe,'M iso')] * feGet(fe,'full weights');
+   
+    %%
+    if ~isempty(varargin)
+      % voxelIndices     = feGet(fe,'voxelsindices',varargin);
+      % voxelRowsToKeep  = feGet(fe,'voxel rows',voxelIndices);
+      % val           = val(voxelRowsToKeep,:);
+      val = val(feGet(fe,'voxel rows',feGet(fe,'voxelsindices',varargin)));
+    end
 
 %% Put pSig in nifti structure
 pNifti = niftiSet(pNifti,'data',pData);
