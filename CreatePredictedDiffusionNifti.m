@@ -119,10 +119,10 @@ for ii = 1:length(small_fg_img.fibers);
         
         % BW to make the visualization work ... also, look over dwiSet/Get/Create
         %
-        tmp = feComputeSignal(S0(jj), fe_bvecs2, fe_bvals2, voxTensor);
-        dwi2 = dwiSet(dwi,'sig',tmp);
-        mrvNewGraphWin; dwiPlot(dwi2,'adc',tmp(11:end),reshape(voxTensor,3,3)) 
-        dwiPlot(dwi2,'dsig image xy',tmp)
+%         tmp = feComputeSignal(S0(jj), fe_bvecs2, fe_bvals2, voxTensor);
+%         dwi2 = dwiSet(dwi,'sig',tmp);
+%         mrvNewGraphWin; dwiPlot(dwi2,'adc',tmp(11:end),reshape(voxTensor,3,3)) 
+%         dwiPlot(dwi2,'dsig image xy',tmp)
         
         %           pData(fCoords(jj,1),fCoords(jj,2),fCoords(jj,3),1:length(fe_bvecs2)) =...
         %             wgts(ii)*feComputeSignal(S0(jj), fe_bvecs2, fe_bvals2, voxTensor);
@@ -145,7 +145,10 @@ end
     % pSig = feGet(fe,'pSig full',coords)
     % pSig = feGet(fe,'pSig full',voxelIndices)
     val = [feGet(fe,'M fiber'), feGet(fe,'M iso')] * feGet(fe,'full weights');
+    
+    Mfiber = full(feGet(fe,'M fiber')); Miso = full(feGet(fe,'M iso'));
    
+    combine = [ Mfiber, Miso];
     %%
     if ~isempty(varargin)
       % voxelIndices     = feGet(fe,'voxelsindices',varargin);

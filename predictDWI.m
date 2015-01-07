@@ -1,4 +1,4 @@
-function CreatePredictedDiffusionNifti
+function predictDWI
 %% Use Franco's example data
 
 try lifeDemoDataPath
