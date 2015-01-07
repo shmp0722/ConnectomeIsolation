@@ -21,15 +21,16 @@ bvals =   dlmread(fullfile(lifeDemoDataPath('diffusion'),'life_demo_scan1_subjec
 
 dwi   = dwiCreate('nifti',nifti,'bvecs',bvecs','bvals',bvals');
 
-%% Take the first 10 fibers from the fiber group
+%% Take the first nKept fibers from the fiber group
+nKept = 75;
 
 % This is intended to run quickly
 fgFileName    = fullfile(lifeDemoDataPath('tractography'), ...
     'life_demo_mrtrix_csd_lmax10_probabilistic.mat');
 
 fg = fgRead(fgFileName);
-small_fg = fgCreate('name', ['small_' fg.name], 'fibers', fg.fibers(1:10));
-small_fg.pathwayInfo = fg.pathwayInfo(1:10);
+small_fg = fgCreate('name', ['small_' fg.name], 'fibers', fg.fibers(1:nKept));
+small_fg.pathwayInfo = fg.pathwayInfo(1:nKept);
 % fgWrite(small_fg, fullfile(lifeDemoDataPath('diffusion'), 'small_fg.mat'));
 
 clear fg
@@ -45,6 +46,8 @@ small_fg_img = dtiXformFiberCoords(small_fg, inv(dwi.nifti.qto_xyz), 'img');
 % Running with the issue2 branch on LiFE
 %
 % If we don't need fiber weights, we can skip this
+%
+% We are getting warnings here ... try to figure this out with Franco.
 
 feFileName    = 'life_build_model_demo_CSD_PROB_small';
 fe = feConnectomeInit(dwiFile, small_fg, feFileName,fullfile(fileparts(fgFileName)),dwiFileRepeat,t1File);
@@ -72,7 +75,7 @@ pNifti.fname = newFname;
 
 Mfiber = feGet(fe,'M fiber');
 Miso   = feGet(fe,'M iso');
-wgts   =  feGet(fe,'full weights');
+wgts   = feGet(fe,'full weights');
 pSig   = [Mfiber,Miso]*wgts;
 
 coords = feGet(fe,'roi coords');
@@ -97,15 +100,29 @@ end
 
 mrvNewGraphWin;
 plot(oSig(:),pSig(:),'.')
+identityLine
+xlabel('Measured'); ylabel('Predicted');
+title('All fibers')
 
 
 %% Figure out how to zero out some of the fibers
 newWgts = wgts;
-newWgts(3:8) = 0;
+nFibers = size(Mfiber,2);
+fRemove = 0.01;   % Fraction of fibers to remove (randomly selected)
 
+% As skip gets smaller, we zero out more fibers
+nRemove = round(nFibers*fRemove);
+% Find a non-statistics toolbox version of randsample.
+% Psychtoolbox has one, I think.
+lst = sort(randsample(nFibers,nRemove));   
+newWgts(lst) = 0;
 pSig2   = [Mfiber,Miso]*newWgts;
 
-
+mrvNewGraphWin;
+plot(oSig(:),pSig2(:),'.')
+identityLine
+xlabel('Measured'); ylabel('Predicted');
+title(sprintf('Removed %i out of %i\n',nRemove,nFibers));
 
 
 %% Compute the diffusion tensors for each node in each fiber
