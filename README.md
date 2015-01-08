@@ -1,5 +1,8 @@
 ConnectomeIsolation
 
+Goal is  
+Just to create predicted diffusion nifti file. 
+
 SO @ Vista lab 2014
 
 ===================
