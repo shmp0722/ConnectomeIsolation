@@ -35,12 +35,6 @@ small_fg.pathwayInfo = fg.pathwayInfo(1:nKept);
 
 clear fg
 
-% transform coordinates in image space form acpc
-small_fg_img = dtiXformFiberCoords(small_fg, inv(dwi.nifti.qto_xyz), 'img');
-
-% img_coords  = horzcat(small_fg_img.fibers{:});
-% img_coords2 = horzcat(fe.fg.fibers{:}); These are identical
-
 %% Build a model of the connectome.
 %
 % Running with the issue2 branch on LiFE
@@ -56,36 +50,24 @@ fe = feConnectomeInit(dwiFile, small_fg, feFileName,fullfile(fileparts(fgFileNam
 
 fe = feSet(fe,'fit',feFitModel(feGet(fe,'mfiber'),feGet(fe,'dsigdemeaned'),'bbnnls'));
 
-%% Make an empty nifti file the same size as the original
-% pNifti = niftiCreate;
-pData = zeros(size(nifti.data));
-
-% duplicate original nifti structure
-pNifti      = nifti;
-pNifti.data = pData;
-
-% strip .extension
-[p,f] = fileparts(pNifti.fname);
-[~,f] = fileparts(f);
-newFname = [p,f,'_Predicted.nii.gz'];
-% give name to pNifti
-pNifti.fname = newFname;
-
 %% Here is the predicted signal from the life fit for the whole connectome
 
-Mfiber = feGet(fe,'M fiber');
+Mfiber = feGet(fe,'M fiber'); 
 Miso   = feGet(fe,'M iso');
 wgts   = feGet(fe,'full weights');
-pSig   = [Mfiber,Miso]*wgts;
+pSig   = [Mfiber,Miso]*wgts; % pSig = feGet(fe,'pSig full');
 
-coords = feGet(fe,'roi coords');
+coords  = feGet(fe,'roi coords');
 nVoxels = size(coords,1);
+nBvecs  = feGet(fe,'nbvecs');
+nB0     = length(find(dwi.bvals==0));
 
 % Take the pSig values and put them in a data volume like the nifti data
 % volume
 roiSig = zeros(size(nifti.data));
-for cc=1:size(coords,2)
-    roiSig(coords(cc,1),coords(cc,2),coords(cc,3),11:end) = pSig((cc-1)*96 + (1:96));
+for cc=1:nVoxels
+    roiSig(coords(cc,1),coords(cc,2),coords(cc,3),(nB0+1):end) =...
+        pSig((cc-1)*nBvecs + (1:nBvecs));
 end
 
 % Or, to compare the predicted and observed signal, get the observed signal
@@ -93,7 +75,7 @@ end
 sig  = niftiGet(nifti,'data');
 oSig = zeros(size(pSig));
 for cc = 1:nVoxels
-    oSig((cc-1)*96 + (1:96)) = sig(coords(cc,1),coords(cc,2),coords(cc,3),11:end);
+    oSig((cc-1)*96 + (1:96)) = sig(coords(cc,1),coords(cc,2),coords(cc,3),(nB0+1):end);
 end
 
 %% Debug, what is wrong with the coordinates if anything ...
@@ -104,11 +86,11 @@ identityLine
 xlabel('Measured'); ylabel('Predicted');
 title('All fibers')
 
-
 %% Figure out how to zero out some of the fibers
+
 newWgts = wgts;
 nFibers = size(Mfiber,2);
-fRemove = 0.01;   % Fraction of fibers to remove (randomly selected)
+fRemove = 0.50;   % Fraction of fibers to remove (randomly selected)
 
 % As skip gets smaller, we zero out more fibers
 nRemove = round(nFibers*fRemove);
@@ -124,135 +106,51 @@ identityLine
 xlabel('Measured'); ylabel('Predicted');
 title(sprintf('Removed %i out of %i\n',nRemove,nFibers));
 
+%% SO figure out how to zero out some of the fibers
 
-%% Compute the diffusion tensors for each node in each fiber
+fiberWgts = feGet(fe,'fiber weights');
+isoWgts   = feGet(fe,'iso weights');
 
-% The direction at the node is the average direction between this node and
-% each of its neighbors% Isotropic portion of M matrix. Returns the matrix for the full model or
+% remove fibers by percrntile of weights
+% In oreder to see the effect, remove high weighted fibers 
+NonZeroFwgts = fiberWgts(fiberWgts>0);
+prct = 80;
+CutOff = prctile(NonZeroFwgts,prct);
+newFwgts = fiberWgts;
+newFwgts(newFwgts>CutOff) =0;
 
-% The diagonal parameters are for a perfect stick, [1 0 0]
-Q = feComputeCanonicalDiffusion(small_fg_img.fibers, [1 0 0]);  % Q = feGet(fe,''fibers tensors');
-% Q = feComputeCanonicalDiffusion_voxel(img_coords, [1 0 0]);
-%% Add diffusion signal for each fiber coordinate
-% We are not sure about which coordinate is the xyz
-% We are not sure how to get the S0 value out of the b=0 (non-diffusion
-% weighted) image
+% combine new fiber weights with iso weights 
+newWgts = [newFwgts;isoWgts];
 
-%% Please explain
+pSig2   = [Mfiber,Miso]*newWgts;
 
-fe_bvecs2             = bvecs'; %feGet(fe,'bvecs');
-fe_bvals2             = bvals'./1000; %feGet(fe,'bvals');
+mrvNewGraphWin;
+plot(oSig(:),pSig2(:),'.')
+identityLine
+xlabel('Measured'); ylabel('Predicted');
+% title(sprintf('Removed lowest %i out of %i\n',length(newFwgts(newFwgts==0)),nFibers));
+title(sprintf('Removed highest %i out of %i\n',length(newFwgts(newFwgts==0)),nFibers));
 
-%% Comupute prediction diffusion signals
-for ii = 1:length(small_fg_img.fibers);
-    
-    % These coordinates are within the first fiber, and thus the connectome
-    % This is an N x 3 matrix of integers, needed by feGet.
-    % This way of getting the fiber coordinates matches the coordinates in the
-    % ROI.  But it is obviously ridiculous and if we have to have a difference
-    % in the coordinate frames, then there has to be a roi2fg() coordinate
-    % transform.  We can't write code like this everywhere.
-    fCoords = ((uint32(ceil(small_fg_img.fibers{ii})))+1)';
-    
-    % take S0 image
-    S0 = dwiGet(dwi,'b0 image',fCoords); % S0_All = fe.diffusion_S0_img;    
-   
-    % Compute predicted diffusion direction in each voxel   
-    for jj = 1:length(fCoords)
-        % For each fiber coordinate create a predicted signal.  Here is the
-        % fiber tensor at that coordinate
-        voxTensor = Q{ii}(jj,:);
-        
-        % Add the new signal to the current signals at that coordinate        
-        curSig = pData(fCoords(jj,1),fCoords(jj,2),fCoords(jj,3),1:length(fe_bvecs2));
-        newSig = wgts(ii)*feComputeSignal(S0(jj), fe_bvecs2, fe_bvals2, voxTensor);
-        
-        % Store back in
-        pData(fCoords(jj,1),fCoords(jj,2),fCoords(jj,3),1:length(fe_bvecs2)) = ...
-            squeeze(curSig) + newSig;
-        
-        % BW to make the visualization work ... also, look over dwiSet/Get/Create
-        %
-        tmp = feComputeSignal(S0(jj), fe_bvecs2, fe_bvals2, voxTensor);
-        dwi2 = dwiSet(dwi,'sig',tmp);
-        mrvNewGraphWin; dwiPlot(dwi2,'adc',tmp(11:end),reshape(voxTensor,3,3)) 
-        dwiPlot(dwi2,'dsig image xy',tmp)
-        
-        %           pData(fCoords(jj,1),fCoords(jj,2),fCoords(jj,3),1:length(fe_bvecs2)) =...
-        %             wgts(ii)*feComputeSignal(S0(jj), fe_bvecs2, fe_bvals2, voxTensor);
-        
-        % For the moment we are keeping everything, but we may not have to
-        % do this in the long run.
-        % OK, keep PSig based on fiber and voxel
-        % The empty slots have no fibers.
-        % The other slots of 106 diffusion signals predicted
-        PSig_voxel{ii,jj} = newSig;
-
-    end
-    clear S0
+%% Make an empty nifti file the same size as the original
+% Put pSig back to original nifti
+pData = nifti.data;
+for cc=1:nVoxels
+    pData(coords(cc,1),coords(cc,2),coords(cc,3),11:end) = pSig((cc-1)*96 + (1:96));
 end
+% duplicate original nifti structure
+pNifti      = nifti;
+pNifti.data = pData;
 
-%% Franco did get the pSig like this
-% Predicted measured signal from both fiber and iso
-    %
-    % pSig = feGet(fe,'pSig full')
-    % pSig = feGet(fe,'pSig full',coords)
-    % pSig = feGet(fe,'pSig full',voxelIndices)
-    val = [feGet(fe,'M fiber'), feGet(fe,'M iso')] * feGet(fe,'full weights');
-   
-    %%
-    if ~isempty(varargin)
-      % voxelIndices     = feGet(fe,'voxelsindices',varargin);
-      % voxelRowsToKeep  = feGet(fe,'voxel rows',voxelIndices);
-      % val           = val(voxelRowsToKeep,:);
-      val = val(feGet(fe,'voxel rows',feGet(fe,'voxelsindices',varargin)));
-    end
+% strip .extension
+[p,f] = fileparts(pNifti.fname);
+[~,f] = fileparts(f);
 
-%% Put pSig in nifti structure
-pNifti = niftiSet(pNifti,'data',pData);
+% give name to pNifti
+newFname = [p,f,'_Predicted.nii.gz'];
+pNifti.fname = newFname;
 
-% save the nifti file 
-if save_flag,
-    niftiWrite(pNifti, pNifti.fname)
-end
-
-% Let's figure out how to see what we created in the pNifti data set.
-
+%%
 return
-
-%% EXTRA REMOVE SOME DAY
-
-%% 96 diffusion direction only
-fe_bvecs             = feGet(fe,'bvecs');
-fe_bvals             = bvals(dwi.bvals ~= 0)'./1000; %feGet(fe,'bvals');
-
-for ii = 1:length(fe.fg.fibers);
-    
-    % These coordinates are within the first fiber, and thus the connectome
-    % This is an N x 3 matrix of integers, needed by feGet.
-    % This way of getting the fiber coordinates matches the coordinates in the
-    % ROI.  But it is obviously ridiculous and if we have to have a difference
-    % in the coordinate frames, then there has to be a roi2fg() coordinate
-    % transform.  We can't write code like this everywhere.
-    fCoords = ((uint32(ceil(fe.fg.fibers{ii})))+1)';
-    
-    % take S0 image
-    S0 = dwiGet(dwi,'b0 image',fCoords); % S0_All = fe.diffusion_S0_img;
-    
-    % keep indices of the coords in img space.
-    indx = sub2ind(dwi.nifti.dim(1:3),fCoords(:,1),fCoords(:,2),fCoords(:,3));
-    
-    for jj = 1:length(S0)
-        % Once we get the S0 values for this particular voxel, we can compute
-        
-        voxTesorQ = Q{ii}(jj,:);
-        % voxTesorQ = feGet(fe,'voxel tensors',foundVoxels(jj));
-        % TensorVoxel = dwiGet(dwi,'tensor image', fCoords(jj,:)); ??
-        
-        PSig_voxel{ii,jj} = feComputeSignal(S0(jj), fe_bvecs, fe_bvals, voxTesorQ);
-    end
-    clear S0, clear indx
-end
 
 %% ---------
 % Fiber density statistics.
